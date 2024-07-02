@@ -7,6 +7,9 @@ import { Argon2id } from 'oslo/password'
 import { lucia } from '@/lib/lucia'
 import { cookies } from 'next/headers'
 import { signInFormSchema } from './SignInForm'
+import { redirect } from 'next/navigation'
+import { generateCodeVerifier, generateState } from 'arctic'
+import { githubOauth } from '@/lib/githubOauth'
 
 export const signUp = async (values: z.infer<typeof signUpFormSchema>) => {
   try {
@@ -72,4 +75,37 @@ export const signIn = async (values: z.infer<typeof signInFormSchema>) => {
   )
 
   return { success: true }
+}
+
+export const logOut = async () => {
+  const sessionCookie = await lucia.createBlankSessionCookie()
+  cookies().set(
+    sessionCookie.name,
+    sessionCookie.value,
+    sessionCookie.attributes
+  )
+  return redirect('authenticate')
+}
+
+export const getGithubOauthConsentUrl = async () => {
+  try {
+    const state = generateState()
+    const codeVerifier = generateCodeVerifier()
+
+    cookies().set('codeVerifier', codeVerifier, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+    })
+    cookies().set('state', state, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+    })
+
+    const authUrl = await githubOauth.createAuthorizationURL(state, {
+      scopes: ['user:email'],
+    })
+    return { success: true, url: authUrl.toString() }
+  } catch (error) {
+    return { success: false, error: 'An error occurred' }
+  }
 }
